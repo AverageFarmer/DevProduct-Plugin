@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   pickImage: () => ipcRenderer.invoke('pick-image'),
   getSavedPlaces: () => ipcRenderer.invoke('get-saved-places'),
   savePlace: (place) => ipcRenderer.invoke('save-place', place),

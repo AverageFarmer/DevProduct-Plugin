@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const NAV_ITEMS = [
   { id: 'create', label: 'Create Products', icon: '+' },
@@ -6,6 +6,12 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar({ activeTab, onTabChange, isReady }) {
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    window.api.getAppVersion().then((v) => setVersion(v));
+  }, []);
+
   return (
     <div className="sidebar">
       <div className="sidebar-brand">
@@ -26,7 +32,7 @@ export default function Sidebar({ activeTab, onTabChange, isReady }) {
         ))}
       </nav>
       <div className="sidebar-footer">
-        <span className="version">v1.0.0</span>
+        <span className="version">v{version}</span>
       </div>
     </div>
   );

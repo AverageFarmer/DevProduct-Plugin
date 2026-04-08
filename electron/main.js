@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const robloxApi = require('./roblox-api');
@@ -55,6 +55,12 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '..', 'src', 'index.html'));
   mainWindow.setMenuBarVisibility(false);
+
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools();
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -111,6 +117,10 @@ ipcMain.handle('remove-saved-place', (_, placeId) => {
   places = places.filter((p) => p.placeId !== placeId);
   writeSavedPlaces(places);
   return places;
+});
+
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
 });
 
 // ── IPC Handlers ──

@@ -78,9 +78,7 @@ export default function ProductList({ universeId }) {
   // Build the Lua-style extract table
   const extractText = `return {\n${products
     .map((p) => {
-      // Clean the name to be a valid Lua key
-      const key = p.name.replace(/[^a-zA-Z0-9_ ]/g, '').replace(/ /g, '_');
-      return `\t${key} = ${p.productId},`;
+      return `\t["${p.name}"] = ${p.productId},`;
     })
     .join('\n')}\n}`;
 

@@ -227,9 +227,9 @@ async function listProducts(universeId, pageToken) {
       const data = res.json();
       // Normalize API fields to consistent names
       const products = (data.developerProducts || []).map((p) => ({
-        productId: p.productId || p.id,
-        name: p.name,
-        price: p.price ?? p.defaultPrice ?? p.priceInRobux ?? null,
+        productId: p.productId || p.id || p.developerProductId,
+        name: p.name || p.displayName,
+        price: (p.priceInformation && p.priceInformation.defaultPriceInRobux) ?? p.price ?? p.defaultPrice ?? null,
         description: p.description || '',
         iconImageAssetId: p.iconImageAssetId || null,
         _raw: p, // keep raw data for debugging
