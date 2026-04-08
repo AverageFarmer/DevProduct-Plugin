@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx electron:*)",
+      "Bash(npx webpack:*)",
+      "Bash(npm install:*)",
+      "Bash(ls \"C:/Users/leggo/Dropbox/GitHub/DevProduct Plugin/src/Icon\"*)",
+      "Bash(node -e ':*)",
+      "Bash(node -e \"const m = require\\('png-to-ico'\\); console.log\\(typeof m, Object.keys\\(m\\)\\);\")"
+    ]
+  }
+}

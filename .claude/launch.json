@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "webpack-watch",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 0
+    },
+    {
+      "name": "electron",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "electron"],
+      "port": 0
+    }
+  ]
+}
