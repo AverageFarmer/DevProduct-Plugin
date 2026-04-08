@@ -1,8 +1,9 @@
 {
   "name": "devproduct-bulk-creator",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Bulk create and manage Roblox Developer Products",
   "main": "electron/main.js",
+  "author": "Dizzy (Dvyz)",
   "scripts": {
     "start": "webpack --mode development && electron .",
     "build": "webpack --mode production",
