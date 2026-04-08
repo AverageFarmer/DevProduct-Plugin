@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
+import ImagePicker from './ImagePicker';
 
-const emptyRow = () => ({ name: '', price: '', description: '', id: Date.now() + Math.random() });
+const emptyRow = () => ({ name: '', price: '', description: '', imagePath: null, id: Date.now() + Math.random() });
 
 export default function ManualEntry({ onProductsReady }) {
   const [rows, setRows] = useState([emptyRow(), emptyRow(), emptyRow()]);
@@ -28,6 +29,7 @@ export default function ManualEntry({ onProductsReady }) {
         name: r.name.trim(),
         price: parseInt(r.price, 10),
         description: r.description.trim() || undefined,
+        imagePath: r.imagePath || undefined,
       }));
   };
 
@@ -49,6 +51,7 @@ export default function ManualEntry({ onProductsReady }) {
 
       <div className="entry-table">
         <div className="entry-table-header">
+          <span className="col-img">Image</span>
           <span className="col-num">#</span>
           <span className="col-name">Name</span>
           <span className="col-price">Price</span>
@@ -58,6 +61,13 @@ export default function ManualEntry({ onProductsReady }) {
         <div className="entry-table-body">
           {rows.map((row, i) => (
             <div key={row.id} className="entry-row">
+              <span className="col-img">
+                <ImagePicker
+                  value={row.imagePath}
+                  onChange={(path) => updateRow(i, 'imagePath', path)}
+                  compact
+                />
+              </span>
               <span className="col-num">{i + 1}</span>
               <input
                 className="col-name"

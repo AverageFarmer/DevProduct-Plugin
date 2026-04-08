@@ -9,6 +9,8 @@ export default function ProductList({ universeId }) {
   const [editValues, setEditValues] = useState({});
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('');
+  const [showExtract, setShowExtract] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const loadProducts = useCallback(async (pageToken) => {
     setLoading(true);
@@ -73,6 +75,21 @@ export default function ProductList({ universeId }) {
     );
   });
 
+  // Build the Lua-style extract table
+  const extractText = `return {\n${products
+    .map((p) => {
+      // Clean the name to be a valid Lua key
+      const key = p.name.replace(/[^a-zA-Z0-9_ ]/g, '').replace(/ /g, '_');
+      return `\t${key} = ${p.productId},`;
+    })
+    .join('\n')}\n}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(extractText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="product-list">
       <div className="list-header">
@@ -87,6 +104,13 @@ export default function ProductList({ universeId }) {
           />
           <button
             className="btn btn-secondary"
+            onClick={() => setShowExtract(!showExtract)}
+            disabled={products.length === 0}
+          >
+            {showExtract ? 'Hide Extract' : 'Extract'}
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={() => loadProducts(null)}
             disabled={loading}
           >
@@ -96,6 +120,18 @@ export default function ProductList({ universeId }) {
       </div>
 
       {error && <div className="error-msg">{error}</div>}
+
+      {showExtract && products.length > 0 && (
+        <div className="extract-panel">
+          <div className="extract-header">
+            <span className="extract-title">Lua Table — {products.length} products</span>
+            <button className="btn btn-small btn-primary" onClick={handleCopy}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <pre className="extract-code">{extractText}</pre>
+        </div>
+      )}
 
       <div className="products-table">
         <div className="products-header">

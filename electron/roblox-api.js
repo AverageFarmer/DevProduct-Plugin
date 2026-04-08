@@ -96,7 +96,11 @@ function request(url, options = {}) {
     req.on('error', reject);
 
     if (options.body) {
-      req.write(options.body);
+      if (Buffer.isBuffer(options.body)) {
+        req.write(options.body);
+      } else {
+        req.write(options.body);
+      }
     }
     req.end();
   });
@@ -114,18 +118,33 @@ async function apiRequest(url, options = {}) {
   return res;
 }
 
-function buildMultipartBody(fields) {
+function buildMultipartBody(fields, filePath) {
   const boundary = '----FormBoundary' + Math.random().toString(36).substring(2);
-  let body = '';
+  const parts = [];
 
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined || value === null) continue;
-    body += `--${boundary}\r\n`;
-    body += `Content-Disposition: form-data; name="${key}"\r\n\r\n`;
-    body += `${value}\r\n`;
+    parts.push(
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`)
+    );
   }
 
-  body += `--${boundary}--\r\n`;
+  // Attach image file if provided
+  if (filePath && fs.existsSync(filePath)) {
+    const fileName = path.basename(filePath);
+    const fileData = fs.readFileSync(filePath);
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="imageFile"; filename="${fileName}"\r\nContent-Type: image/png\r\n\r\n`
+      )
+    );
+    parts.push(fileData);
+    parts.push(Buffer.from('\r\n'));
+  }
+
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+  const body = Buffer.concat(parts);
   return { body, contentType: `multipart/form-data; boundary=${boundary}` };
 }
 
@@ -238,7 +257,7 @@ async function createProduct(universeId, product) {
       fields.description = product.description;
     }
 
-    const { body, contentType } = buildMultipartBody(fields);
+    const { body, contentType } = buildMultipartBody(fields, product.imagePath);
 
     const res = await apiRequest(
       `https://apis.roblox.com/developer-products/v2/universes/${universeId}/developer-products`,

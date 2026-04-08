@@ -3,6 +3,7 @@ import ManualEntry from './ManualEntry';
 import CsvImport from './CsvImport';
 import TemplateGenerator from './TemplateGenerator';
 import ProgressModal from './ProgressModal';
+import ImagePicker from './ImagePicker';
 
 const TABS = [
   { id: 'manual', label: 'Manual Entry' },
@@ -14,9 +15,15 @@ export default function BulkCreator({ universeId }) {
   const [activeTab, setActiveTab] = useState('manual');
   const [queue, setQueue] = useState([]);
   const [showProgress, setShowProgress] = useState(false);
+  const [defaultImage, setDefaultImage] = useState(null);
 
   const addToQueue = (products) => {
-    setQueue((prev) => [...prev, ...products]);
+    // Apply default image to products that don't have their own
+    const withImages = products.map((p) => ({
+      ...p,
+      imagePath: p.imagePath || defaultImage,
+    }));
+    setQueue((prev) => [...prev, ...withImages]);
   };
 
   const removeFromQueue = (index) => {
@@ -27,6 +34,16 @@ export default function BulkCreator({ universeId }) {
 
   return (
     <div className="bulk-creator">
+      <div className="default-image-bar">
+        <ImagePicker
+          label="Default Image"
+          value={defaultImage}
+          onChange={setDefaultImage}
+          compact
+        />
+        <span className="hint">Applied to all products without their own image</span>
+      </div>
+
       <div className="tab-bar">
         {TABS.map((tab) => (
           <button
@@ -54,6 +71,7 @@ export default function BulkCreator({ universeId }) {
           <div className="queue-list">
             {queue.map((p, i) => (
               <div key={i} className="queue-item">
+                {p.imagePath && <img src={'file:///' + p.imagePath.replace(/\\/g, '/')} className="queue-thumb" alt="" />}
                 <span className="queue-name">{p.name}</span>
                 <span className="queue-price">R$ {p.price}</span>
                 <button className="btn-icon" onClick={() => removeFromQueue(i)}>x</button>

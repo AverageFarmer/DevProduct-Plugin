@@ -8,7 +8,8 @@
     "build": "webpack --mode production",
     "dev": "webpack --mode development --watch",
     "electron": "electron .",
-    "dist": "webpack --mode production && electron-builder --win"
+    "dist": "webpack --mode production && electron-builder --win",
+    "publish": "webpack --mode production && electron-builder --win --publish always"
   },
   "build": {
     "appId": "com.devproduct.bulkcreator",
@@ -29,9 +30,15 @@
     ],
     "directories": {
       "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "AverageFarmer",
+      "repo": "DevProduct-Plugin"
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

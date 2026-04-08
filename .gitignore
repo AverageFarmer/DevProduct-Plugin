@@ -3,4 +3,6 @@ release/
 dist/
 src/bundle.js
 icon-256.png
+.claude/
 *.log
+publish.bat
