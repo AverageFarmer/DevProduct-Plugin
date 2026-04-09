@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import AuthPanel from './components/AuthPanel';
 import PlaceSelector from './components/PlaceSelector';
@@ -10,13 +10,33 @@ export default function App() {
   const [place, setPlace] = useState(null);
   const [activeTab, setActiveTab] = useState('create');
   const [updateStatus, setUpdateStatus] = useState(null);
+  const [externalQueue, setExternalQueue] = useState(null);
 
   useEffect(() => {
-    const cleanup = window.api.onUpdateStatus((status) => {
-      setUpdateStatus(status);
-    });
-    return cleanup;
+    const cleanups = [
+      window.api.onUpdateStatus((status) => setUpdateStatus(status)),
+
+      // External control from MCP server
+      window.api.onExternalNavigate((tab) => setActiveTab(tab)),
+      window.api.onExternalSetPlace((placeData) => {
+        setPlace(placeData);
+        // Also save to recent places
+        window.api.savePlace(placeData);
+      }),
+      window.api.onExternalQueue((products) => {
+        setActiveTab('create');
+        setExternalQueue(products);
+      }),
+      window.api.onExternalAuthenticated((userData) => {
+        setUser(userData);
+      }),
+    ];
+
+    return () => cleanups.forEach((fn) => fn());
   }, []);
+
+  // Clear external queue after BulkCreator picks it up
+  const handleExternalQueueConsumed = () => setExternalQueue(null);
 
   const isReady = !!(user && place);
 
@@ -57,7 +77,7 @@ export default function App() {
 
         <div className="top-bar">
           <AuthPanel onAuthenticated={setUser} />
-          {user && <PlaceSelector onPlaceSelected={setPlace} />}
+          {user && <PlaceSelector onPlaceSelected={setPlace} externalPlace={place} />}
         </div>
 
         {!user && (
@@ -75,7 +95,11 @@ export default function App() {
         )}
 
         {isReady && activeTab === 'create' && (
-          <BulkCreator universeId={place.universeId} />
+          <BulkCreator
+            universeId={place.universeId}
+            externalQueue={externalQueue}
+            onExternalQueueConsumed={handleExternalQueueConsumed}
+          />
         )}
 
         {isReady && activeTab === 'manage' && (

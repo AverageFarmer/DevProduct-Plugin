@@ -7,10 +7,22 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ activeTab, onTabChange, isReady }) {
   const [version, setVersion] = useState('');
+  const [mcpRegistered, setMcpRegistered] = useState(false);
+  const [mcpSetupLoading, setMcpSetupLoading] = useState(false);
 
   useEffect(() => {
     window.api.getAppVersion().then((v) => setVersion(v));
+    window.api.checkMcpStatus().then((s) => setMcpRegistered(s.registered));
   }, []);
+
+  const handleSetupMcp = async () => {
+    setMcpSetupLoading(true);
+    const result = await window.api.setupMcp();
+    if (result.success) {
+      setMcpRegistered(true);
+    }
+    setMcpSetupLoading(false);
+  };
 
   return (
     <div className="sidebar">
@@ -32,6 +44,20 @@ export default function Sidebar({ activeTab, onTabChange, isReady }) {
         ))}
       </nav>
       <div className="sidebar-footer">
+        {mcpRegistered ? (
+          <div className="mcp-status connected">
+            <span className="mcp-dot"></span>
+            <span>MCP Connected</span>
+          </div>
+        ) : (
+          <button
+            className="btn btn-mcp"
+            onClick={handleSetupMcp}
+            disabled={mcpSetupLoading}
+          >
+            {mcpSetupLoading ? 'Setting up...' : 'Setup Claude MCP'}
+          </button>
+        )}
         <span className="version">v{version}</span>
       </div>
     </div>

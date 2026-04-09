@@ -1,6 +1,6 @@
 {
   "name": "devproduct-bulk-creator",
-  "version": "1.0.3",
+  "version": "1.0.45",
   "description": "Bulk create and manage Roblox Developer Products",
   "main": "electron/main.js",
   "author": "Dizzy (Dvyz)",
@@ -39,6 +39,7 @@
     }
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "electron-updater": "^6.8.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

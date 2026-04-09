@@ -123,6 +123,50 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+// ── MCP Setup (writes to claude_desktop_config.json directly) ──
+
+function getClaudeConfigPath() {
+  return path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
+}
+
+ipcMain.handle('check-mcp-status', () => {
+  try {
+    const configPath = getClaudeConfigPath();
+    if (!fs.existsSync(configPath)) return { registered: false };
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    return { registered: !!(config.mcpServers && config.mcpServers.devproduct) };
+  } catch (e) {
+    return { registered: false };
+  }
+});
+
+ipcMain.handle('setup-mcp', () => {
+  try {
+    const configPath = getClaudeConfigPath();
+    const configDir = path.dirname(configPath);
+    const serverPath = path.join(__dirname, '..', 'mcp-server.js');
+
+    // Load or create config
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } else if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    if (!config.mcpServers) config.mcpServers = {};
+    config.mcpServers.devproduct = {
+      command: 'node',
+      args: [serverPath],
+    };
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // ── IPC Handlers ──
 
 ipcMain.handle('pick-image', async () => {
@@ -171,4 +215,146 @@ ipcMain.handle('bulk-create', async (event, universeId, products) => {
 
 ipcMain.handle('cancel-bulk', async () => {
   robloxApi.cancelBulk();
+});
+
+// ── Local HTTP API for MCP Server ──
+
+const http = require('http');
+const API_PORT = 17532;
+
+function parseBody(req) {
+  return new Promise((resolve) => {
+    let data = '';
+    req.on('data', (chunk) => (data += chunk));
+    req.on('end', () => {
+      try { resolve(JSON.parse(data)); }
+      catch { resolve({}); }
+    });
+  });
+}
+
+function sendJson(res, status, data) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+}
+
+const apiServer = http.createServer(async (req, res) => {
+  // CORS for local only
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+
+  try {
+    // POST /navigate — switch tabs
+    if (req.method === 'POST' && req.url === '/navigate') {
+      const { tab } = await parseBody(req);
+      mainWindow.webContents.send('external-navigate', tab);
+      mainWindow.focus();
+      return sendJson(res, 200, { success: true });
+    }
+
+    // POST /set-place — load a place by ID
+    if (req.method === 'POST' && req.url === '/set-place') {
+      const { placeId } = await parseBody(req);
+      const result = await robloxApi.getUniverseId(placeId);
+      if (result.success) {
+        mainWindow.webContents.send('external-set-place', {
+          placeId,
+          universeId: result.universeId,
+          gameName: result.gameName,
+        });
+        mainWindow.focus();
+      }
+      return sendJson(res, 200, result);
+    }
+
+    // POST /queue — add products to the creation queue visually
+    if (req.method === 'POST' && req.url === '/queue') {
+      const { products } = await parseBody(req);
+      mainWindow.webContents.send('external-navigate', 'create');
+      mainWindow.webContents.send('external-queue', products);
+      mainWindow.focus();
+      return sendJson(res, 200, { success: true, queued: products.length });
+    }
+
+    // POST /create — trigger creation of queued products and wait for results
+    if (req.method === 'POST' && req.url === '/create') {
+      const { universeId, products } = await parseBody(req);
+      mainWindow.webContents.send('external-navigate', 'create');
+      mainWindow.webContents.send('external-queue', products);
+      mainWindow.focus();
+
+      // Small delay so the UI shows the queue before starting
+      await new Promise((r) => setTimeout(r, 500));
+
+      // Trigger bulk creation and collect results
+      const result = await robloxApi.bulkCreate(universeId, products, (progress) => {
+        mainWindow.webContents.send('bulk-progress', progress);
+        mainWindow.webContents.send('external-progress', progress);
+      });
+
+      // Tell renderer creation is done
+      mainWindow.webContents.send('external-create-done', result);
+      return sendJson(res, 200, result);
+    }
+
+    // GET /products — list existing products
+    if (req.method === 'GET' && req.url.startsWith('/products')) {
+      const url = new URL(req.url, 'http://localhost');
+      const universeId = url.searchParams.get('universeId');
+      const pageToken = url.searchParams.get('pageToken');
+      if (!universeId) return sendJson(res, 400, { error: 'universeId required' });
+
+      mainWindow.webContents.send('external-navigate', 'manage');
+      mainWindow.focus();
+
+      const allProducts = [];
+      let token = pageToken || null;
+      do {
+        const result = await robloxApi.listProducts(universeId, token);
+        if (!result.success) return sendJson(res, 500, result);
+        allProducts.push(...result.products);
+        token = result.nextPageToken;
+      } while (token);
+
+      return sendJson(res, 200, { success: true, products: allProducts });
+    }
+
+    // POST /validate-cookie
+    if (req.method === 'POST' && req.url === '/validate-cookie') {
+      const { cookie } = await parseBody(req);
+      const result = await robloxApi.validateCookie(cookie);
+      if (result.success) {
+        mainWindow.webContents.send('external-authenticated', result);
+      }
+      return sendJson(res, 200, result);
+    }
+
+    // POST /update-product
+    if (req.method === 'POST' && req.url === '/update-product') {
+      const { universeId, productId, fields } = await parseBody(req);
+      const result = await robloxApi.updateProduct(universeId, productId, fields);
+      return sendJson(res, 200, result);
+    }
+
+    // GET /status — check if app is running and authenticated
+    if (req.method === 'GET' && req.url === '/status') {
+      const autoLogin = await robloxApi.tryAutoLogin();
+      return sendJson(res, 200, {
+        running: true,
+        authenticated: autoLogin.success,
+        user: autoLogin.success ? autoLogin : null,
+      });
+    }
+
+    sendJson(res, 404, { error: 'Not found' });
+  } catch (err) {
+    sendJson(res, 500, { error: err.message });
+  }
+});
+
+apiServer.listen(API_PORT, '127.0.0.1', () => {
+  console.log(`MCP API server listening on http://127.0.0.1:${API_PORT}`);
 });

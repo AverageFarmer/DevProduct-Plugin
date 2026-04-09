@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ManualEntry from './ManualEntry';
 import CsvImport from './CsvImport';
 import TemplateGenerator from './TemplateGenerator';
@@ -11,11 +11,27 @@ const TABS = [
   { id: 'template', label: 'Template Generator' },
 ];
 
-export default function BulkCreator({ universeId }) {
+export default function BulkCreator({ universeId, externalQueue, onExternalQueueConsumed }) {
   const [activeTab, setActiveTab] = useState('manual');
   const [queue, setQueue] = useState([]);
   const [showProgress, setShowProgress] = useState(false);
   const [defaultImage, setDefaultImage] = useState(null);
+
+  // Handle products pushed from MCP server
+  useEffect(() => {
+    if (externalQueue && externalQueue.length > 0) {
+      setQueue((prev) => [...prev, ...externalQueue]);
+      if (onExternalQueueConsumed) onExternalQueueConsumed();
+    }
+  }, [externalQueue]);
+
+  // Clear queue when MCP creation finishes
+  useEffect(() => {
+    const cleanup = window.api.onExternalCreateDone(() => {
+      setQueue([]);
+    });
+    return cleanup;
+  }, []);
 
   const addToQueue = (products) => {
     // Apply default image to products that don't have their own

@@ -120,13 +120,78 @@ body {
 }
 
 .sidebar-footer {
-  padding: 12px 20px;
+  padding: 12px 14px;
   border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .version {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.btn-mcp {
+  width: 100%;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #1e3a5f, #16213e);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-mcp:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-mcp:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mcp-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mcp-status.connected {
+  color: var(--success);
+}
+
+.mcp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+}
+
+.mcp-status.unavailable {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.mcp-cmd {
+  font-family: 'Consolas', monospace;
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--bg-input);
+  padding: 3px 6px;
+  border-radius: 3px;
+  word-break: break-all;
+  user-select: all;
 }
 
 /* ── Update Banner ── */

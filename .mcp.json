@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "devproduct": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp-server.js"],
+      "cwd": "C:\\Users\\leggo\\Dropbox\\GitHub\\DevProduct Plugin"
+    }
+  }
+}

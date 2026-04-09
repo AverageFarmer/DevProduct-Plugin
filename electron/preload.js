@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  checkMcpStatus: () => ipcRenderer.invoke('check-mcp-status'),
+  setupMcp: () => ipcRenderer.invoke('setup-mcp'),
   pickImage: () => ipcRenderer.invoke('pick-image'),
   getSavedPlaces: () => ipcRenderer.invoke('get-saved-places'),
   savePlace: (place) => ipcRenderer.invoke('save-place', place),
@@ -25,4 +27,30 @@ contextBridge.exposeInMainWorld('api', {
   },
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+
+  // External control (from MCP server via local HTTP API)
+  onExternalNavigate: (cb) => {
+    ipcRenderer.on('external-navigate', (_, tab) => cb(tab));
+    return () => ipcRenderer.removeAllListeners('external-navigate');
+  },
+  onExternalSetPlace: (cb) => {
+    ipcRenderer.on('external-set-place', (_, place) => cb(place));
+    return () => ipcRenderer.removeAllListeners('external-set-place');
+  },
+  onExternalQueue: (cb) => {
+    ipcRenderer.on('external-queue', (_, products) => cb(products));
+    return () => ipcRenderer.removeAllListeners('external-queue');
+  },
+  onExternalProgress: (cb) => {
+    ipcRenderer.on('external-progress', (_, progress) => cb(progress));
+    return () => ipcRenderer.removeAllListeners('external-progress');
+  },
+  onExternalCreateDone: (cb) => {
+    ipcRenderer.on('external-create-done', (_, result) => cb(result));
+    return () => ipcRenderer.removeAllListeners('external-create-done');
+  },
+  onExternalAuthenticated: (cb) => {
+    ipcRenderer.on('external-authenticated', (_, user) => cb(user));
+    return () => ipcRenderer.removeAllListeners('external-authenticated');
+  },
 });

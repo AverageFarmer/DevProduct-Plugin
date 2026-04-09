@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function PlaceSelector({ onPlaceSelected }) {
+export default function PlaceSelector({ onPlaceSelected, externalPlace }) {
   const [placeId, setPlaceId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -10,6 +10,14 @@ export default function PlaceSelector({ onPlaceSelected }) {
   useEffect(() => {
     window.api.getSavedPlaces().then(setSavedPlaces);
   }, []);
+
+  // Handle external place set from MCP server
+  useEffect(() => {
+    if (externalPlace && externalPlace.universeId && !placeInfo) {
+      setPlaceId(externalPlace.placeId);
+      setPlaceInfo({ universeId: externalPlace.universeId, gameName: externalPlace.gameName });
+    }
+  }, [externalPlace]);
 
   const handleResolve = async () => {
     const id = placeId.trim();
