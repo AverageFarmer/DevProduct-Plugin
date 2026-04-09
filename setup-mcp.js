@@ -2,7 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 const projectDir = (process.argv[2] || __dirname).replace(/[\\/]+$/, '');
-const serverPath = path.join(projectDir, 'mcp-server.js');
+// Check both project root (dev) and resources dir (installed app)
+let serverPath = path.join(projectDir, 'mcp-server.js');
+if (!fs.existsSync(serverPath)) {
+  serverPath = path.join(projectDir, 'resources', 'mcp-server.js');
+}
 
 // Claude Desktop config path
 const configDir = path.join(process.env.APPDATA, 'Claude');

@@ -126,43 +126,77 @@ ipcMain.handle('get-app-version', () => {
 // ── MCP Setup (writes to claude_desktop_config.json directly) ──
 
 function getClaudeConfigPath() {
-  return path.join(process.env.APPDATA || '', 'Claude', 'claude_desktop_config.json');
+  const appData = process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming');
+  return path.join(appData, 'Claude', 'claude_desktop_config.json');
 }
 
 ipcMain.handle('check-mcp-status', () => {
   try {
     const configPath = getClaudeConfigPath();
-    if (!fs.existsSync(configPath)) return { registered: false };
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    return { registered: !!(config.mcpServers && config.mcpServers.devproduct) };
+    console.log('MCP check path:', configPath);
+    if (!fs.existsSync(configPath)) {
+      console.log('MCP config not found');
+      return { registered: false, configPath };
+    }
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(raw);
+    const registered = !!(config.mcpServers && config.mcpServers.devproduct);
+    console.log('MCP registered:', registered);
+    return { registered, configPath };
   } catch (e) {
-    return { registered: false };
+    console.log('MCP check error:', e.message);
+    return { registered: false, error: e.message };
   }
 });
+
+function getMcpServerPath() {
+  if (app.isPackaged) {
+    // Production: mcp-server.js is in resources/ next to app.asar
+    return path.join(process.resourcesPath, 'mcp-server.js');
+  }
+  // Dev: mcp-server.js is in the project root
+  return path.resolve(path.join(__dirname, '..', 'mcp-server.js'));
+}
 
 ipcMain.handle('setup-mcp', () => {
   try {
     const configPath = getClaudeConfigPath();
     const configDir = path.dirname(configPath);
-    const serverPath = path.join(__dirname, '..', 'mcp-server.js');
+    const serverPath = getMcpServerPath();
 
-    // Load or create config
-    let config = {};
-    if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } else if (!fs.existsSync(configDir)) {
+    console.log('MCP setup - config:', configPath);
+    console.log('MCP setup - server:', serverPath);
+
+    // Ensure directory exists
+    if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true });
     }
 
+    // Load existing config or start fresh
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      const raw = fs.readFileSync(configPath, 'utf8');
+      config = JSON.parse(raw);
+    }
+
+    // Add devproduct server
     if (!config.mcpServers) config.mcpServers = {};
     config.mcpServers.devproduct = {
       command: 'node',
       args: [serverPath],
     };
 
+    // Write it back
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-    return { success: true };
+
+    // Verify it was written
+    const verify = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const success = !!(verify.mcpServers && verify.mcpServers.devproduct);
+    console.log('MCP setup verified:', success);
+
+    return { success };
   } catch (e) {
+    console.log('MCP setup error:', e.message);
     return { success: false, error: e.message };
   }
 });

@@ -7,6 +7,7 @@ const {
   ListToolsRequestSchema,
 } = require('@modelcontextprotocol/sdk/types.js');
 const http = require('http');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -35,13 +36,27 @@ function isAppRunning() {
 async function ensureAppRunning() {
   if (await isAppRunning()) return;
 
-  // Launch the Electron app
-  appProcess = spawn('cmd.exe', ['/c', 'npx', 'electron', '.'], {
-    cwd: PROJECT_DIR,
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: false,
-  });
+  // Launch the Electron app — check for installed exe first, fall back to dev
+  const installedExe = path.join(
+    process.env.LOCALAPPDATA || '',
+    'Programs',
+    'DevProduct Bulk Creator',
+    'DevProduct Bulk Creator.exe'
+  );
+
+  if (fs.existsSync(installedExe)) {
+    appProcess = spawn(installedExe, [], {
+      detached: true,
+      stdio: 'ignore',
+    });
+  } else {
+    appProcess = spawn('cmd.exe', ['/c', 'npx', 'electron', '.'], {
+      cwd: PROJECT_DIR,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
+  }
   appProcess.unref();
 
   // Wait for the app to start (up to 15 seconds)

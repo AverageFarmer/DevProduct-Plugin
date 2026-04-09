@@ -1,6 +1,6 @@
 {
   "name": "devproduct-bulk-creator",
-  "version": "1.0.45",
+  "version": "1.0.0",
   "description": "Bulk create and manage Roblox Developer Products",
   "main": "electron/main.js",
   "author": "Dizzy (Dvyz)",
@@ -28,6 +28,12 @@
       "src/index.html",
       "src/bundle.js",
       "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "mcp-server.js",
+        "to": "mcp-server.js"
+      }
     ],
     "directories": {
       "output": "release"
