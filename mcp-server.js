@@ -33,29 +33,50 @@ function isAppRunning() {
   });
 }
 
+function findInstalledExe() {
+  const isDevProductExe = (p) =>
+    p && /devproduct bulk creator\.exe$/i.test(p) && fs.existsSync(p);
+
+  // 1. Honor the exact path the app wrote into the config env (most reliable),
+  //    but only if it actually points at the product binary (not dev electron.exe).
+  const fromEnv = process.env.DEVPRODUCT_APP_PATH;
+  if (isDevProductExe(fromEnv)) return fromEnv;
+
+  // 2. Try common NSIS install locations as a fallback.
+  const candidates = [
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
+  ];
+  for (const candidate of candidates) {
+    if (isDevProductExe(candidate)) return candidate;
+  }
+  return null;
+}
+
 async function ensureAppRunning() {
   if (await isAppRunning()) return;
 
-  // Launch the Electron app — check for installed exe first, fall back to dev
-  const installedExe = path.join(
-    process.env.LOCALAPPDATA || '',
-    'Programs',
-    'DevProduct Bulk Creator',
-    'DevProduct Bulk Creator.exe'
-  );
+  const installedExe = findInstalledExe();
 
-  if (fs.existsSync(installedExe)) {
+  if (installedExe) {
     appProcess = spawn(installedExe, [], {
       detached: true,
       stdio: 'ignore',
     });
-  } else {
+  } else if (fs.existsSync(path.join(PROJECT_DIR, 'package.json'))) {
+    // Dev fallback — only useful when running from a cloned repo
     appProcess = spawn('cmd.exe', ['/c', 'npx', 'electron', '.'], {
       cwd: PROJECT_DIR,
       detached: true,
       stdio: 'ignore',
       windowsHide: false,
     });
+  } else {
+    throw new Error(
+      'DevProduct app is not running and its install location could not be found. ' +
+      'Please open the DevProduct Bulk Creator app manually.'
+    );
   }
   appProcess.unref();
 

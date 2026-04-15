@@ -27,6 +27,7 @@
       "electron/**/*",
       "src/index.html",
       "src/bundle.js",
+      "icon.ico",
       "node_modules/**/*"
     ],
     "extraResources": [

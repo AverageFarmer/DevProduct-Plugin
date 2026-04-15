@@ -32,24 +32,20 @@ This app includes an MCP server that lets [Claude Code](https://claude.ai/claude
 
 ### MCP Setup
 
-**Option 1: In-App Button**
-
 Click **"Setup Claude MCP"** in the sidebar. Done.
 
-**Option 2: Manual**
+The button writes a config entry that uses the Electron binary already bundled
+with this app as the Node runtime, so **you don't need Node.js installed**.
+Restart Claude Desktop after setup for it to take effect.
 
-Run this in your terminal:
-
-```
-claude mcp add --transport stdio -s user devproduct -- node "C:\path\to\DevProduct Plugin\mcp-server.js"
-```
-
-Replace the path with wherever you cloned/installed the project.
+If the status shows "MCP needs reconnection" (for example after updating the
+app or moving the install folder), click **Reconnect MCP** in the sidebar to
+refresh the config to the new install location.
 
 ### MCP Requirements
 
-- [Claude Code](https://claude.ai/claude-code) installed
-- The DevProduct app must be running (it auto-launches if not)
+- [Claude Desktop](https://claude.ai/download) or [Claude Code](https://claude.ai/claude-code) installed
+- The DevProduct app (auto-launches when Claude calls a tool; you can also open it first)
 - You must be logged in to the app
 
 ### MCP Tools

@@ -9,16 +9,22 @@ let mainWindow;
 
 autoUpdater.autoDownload = false;
 
+function sendUpdateStatus(status) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send('update-status', status);
+  }
+}
+
 autoUpdater.on('update-available', (info) => {
-  mainWindow.webContents.send('update-status', { type: 'available', version: info.version });
+  sendUpdateStatus({ type: 'available', version: info.version });
 });
 
 autoUpdater.on('download-progress', (progress) => {
-  mainWindow.webContents.send('update-status', { type: 'progress', percent: Math.round(progress.percent) });
+  sendUpdateStatus({ type: 'progress', percent: Math.round(progress.percent) });
 });
 
 autoUpdater.on('update-downloaded', () => {
-  mainWindow.webContents.send('update-status', { type: 'ready' });
+  sendUpdateStatus({ type: 'ready' });
 });
 
 autoUpdater.on('update-not-available', () => {
@@ -92,7 +98,11 @@ function loadSavedPlaces() {
 }
 
 function writeSavedPlaces(places) {
-  fs.writeFileSync(getSavedPlacesPath(), JSON.stringify(places, null, 2));
+  try {
+    fs.writeFileSync(getSavedPlacesPath(), JSON.stringify(places, null, 2));
+  } catch (e) {
+    console.log('Failed to persist saved places:', e.message);
+  }
 }
 
 ipcMain.handle('get-saved-places', () => {
@@ -130,25 +140,6 @@ function getClaudeConfigPath() {
   return path.join(appData, 'Claude', 'claude_desktop_config.json');
 }
 
-ipcMain.handle('check-mcp-status', () => {
-  try {
-    const configPath = getClaudeConfigPath();
-    console.log('MCP check path:', configPath);
-    if (!fs.existsSync(configPath)) {
-      console.log('MCP config not found');
-      return { registered: false, configPath };
-    }
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const config = JSON.parse(raw);
-    const registered = !!(config.mcpServers && config.mcpServers.devproduct);
-    console.log('MCP registered:', registered);
-    return { registered, configPath };
-  } catch (e) {
-    console.log('MCP check error:', e.message);
-    return { registered: false, error: e.message };
-  }
-});
-
 function getMcpServerPath() {
   if (app.isPackaged) {
     // Production: mcp-server.js is in resources/ next to app.asar
@@ -158,14 +149,112 @@ function getMcpServerPath() {
   return path.resolve(path.join(__dirname, '..', 'mcp-server.js'));
 }
 
+function buildMcpEntry() {
+  // Use Electron's bundled node runtime so users don't need Node.js installed.
+  // When ELECTRON_RUN_AS_NODE=1, the Electron binary behaves exactly like node.
+  // In dev mode, process.execPath is electron.exe from node_modules — still works.
+  return {
+    command: process.execPath,
+    args: [getMcpServerPath()],
+    env: {
+      ELECTRON_RUN_AS_NODE: '1',
+      // Let mcp-server.js auto-launch the correct app binary even if installed
+      // to a non-default location.
+      DEVPRODUCT_APP_PATH: process.execPath,
+    },
+  };
+}
+
+function isEntryHealthy(entry, expectedPath) {
+  if (!entry || typeof entry !== 'object') return { ok: false, issue: 'Missing MCP entry.' };
+
+  const serverPath = entry.args && entry.args[0];
+  if (!serverPath) return { ok: false, issue: 'MCP config is missing the server path.' };
+  if (!fs.existsSync(serverPath)) {
+    return { ok: false, issue: 'MCP server file is missing. The app may have been moved or reinstalled.' };
+  }
+
+  const normalize = (p) => path.resolve(p).toLowerCase();
+  if (normalize(serverPath) !== normalize(expectedPath)) {
+    return { ok: false, issue: 'MCP points to an outdated install location.' };
+  }
+
+  // Detect legacy configs that rely on a system `node` binary. Users without
+  // Node.js installed would hit a silent "failed to start" on Claude Desktop's
+  // side — so treat this as unhealthy and prompt a reconnect.
+  const cmd = String(entry.command || '').toLowerCase();
+  if (cmd === 'node' || cmd === 'node.exe') {
+    return { ok: false, issue: 'MCP uses the legacy "node" command. Reconnect to use the app\'s bundled runtime.' };
+  }
+  if (!fs.existsSync(entry.command)) {
+    return { ok: false, issue: 'MCP command path no longer exists. Reconnect to refresh.' };
+  }
+  if (!entry.env || entry.env.ELECTRON_RUN_AS_NODE !== '1') {
+    return { ok: false, issue: 'MCP is missing required environment. Reconnect to refresh.' };
+  }
+  if (normalize(entry.command) !== normalize(process.execPath)) {
+    return { ok: false, issue: 'MCP points to an outdated app binary.' };
+  }
+
+  return { ok: true, issue: null };
+}
+
+ipcMain.handle('check-mcp-status', () => {
+  const configPath = getClaudeConfigPath();
+  const expectedPath = getMcpServerPath();
+  try {
+    if (!fs.existsSync(configPath)) {
+      return {
+        registered: false,
+        healthy: false,
+        configPath,
+        expectedPath,
+        issue: 'Claude Desktop config not found. Is Claude Desktop installed?',
+      };
+    }
+
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const config = JSON.parse(raw);
+    const entry = config.mcpServers && config.mcpServers.devproduct;
+
+    if (!entry) {
+      return {
+        registered: false,
+        healthy: false,
+        configPath,
+        expectedPath,
+        issue: 'DevProduct MCP is not registered in Claude Desktop.',
+      };
+    }
+
+    const { ok, issue } = isEntryHealthy(entry, expectedPath);
+    return {
+      registered: true,
+      healthy: ok,
+      configPath,
+      serverPath: entry.args && entry.args[0],
+      expectedPath,
+      issue,
+    };
+  } catch (e) {
+    console.log('MCP check error:', e.message);
+    return {
+      registered: false,
+      healthy: false,
+      configPath,
+      expectedPath,
+      issue: `Failed to read config: ${e.message}`,
+    };
+  }
+});
+
 ipcMain.handle('setup-mcp', () => {
   try {
     const configPath = getClaudeConfigPath();
     const configDir = path.dirname(configPath);
-    const serverPath = getMcpServerPath();
 
     console.log('MCP setup - config:', configPath);
-    console.log('MCP setup - server:', serverPath);
+    console.log('MCP setup - server:', getMcpServerPath());
 
     // Ensure directory exists
     if (!fs.existsSync(configDir)) {
@@ -176,15 +265,16 @@ ipcMain.handle('setup-mcp', () => {
     let config = {};
     if (fs.existsSync(configPath)) {
       const raw = fs.readFileSync(configPath, 'utf8');
-      config = JSON.parse(raw);
+      try {
+        config = JSON.parse(raw);
+      } catch (parseErr) {
+        return { success: false, error: `Existing Claude config is not valid JSON: ${parseErr.message}` };
+      }
     }
 
-    // Add devproduct server
+    // Add devproduct server (uses Electron's bundled node — no external Node.js required)
     if (!config.mcpServers) config.mcpServers = {};
-    config.mcpServers.devproduct = {
-      command: 'node',
-      args: [serverPath],
-    };
+    config.mcpServers.devproduct = buildMcpEntry();
 
     // Write it back
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -243,7 +333,7 @@ ipcMain.handle('update-product', async (_, universeId, productId, fields) => {
 
 ipcMain.handle('bulk-create', async (event, universeId, products) => {
   return robloxApi.bulkCreate(universeId, products, (progress) => {
-    mainWindow.webContents.send('bulk-progress', progress);
+    sendToWindow('bulk-progress', progress);
   });
 });
 
@@ -272,6 +362,20 @@ function sendJson(res, status, data) {
   res.end(JSON.stringify(data));
 }
 
+// Safe send + focus that won't crash if the window isn't ready yet or was destroyed.
+function sendToWindow(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function focusWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+}
+
 const apiServer = http.createServer(async (req, res) => {
   // CORS for local only
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -284,8 +388,8 @@ const apiServer = http.createServer(async (req, res) => {
     // POST /navigate — switch tabs
     if (req.method === 'POST' && req.url === '/navigate') {
       const { tab } = await parseBody(req);
-      mainWindow.webContents.send('external-navigate', tab);
-      mainWindow.focus();
+      sendToWindow('external-navigate', tab);
+      focusWindow();
       return sendJson(res, 200, { success: true });
     }
 
@@ -294,12 +398,12 @@ const apiServer = http.createServer(async (req, res) => {
       const { placeId } = await parseBody(req);
       const result = await robloxApi.getUniverseId(placeId);
       if (result.success) {
-        mainWindow.webContents.send('external-set-place', {
+        sendToWindow('external-set-place', {
           placeId,
           universeId: result.universeId,
           gameName: result.gameName,
         });
-        mainWindow.focus();
+        focusWindow();
       }
       return sendJson(res, 200, result);
     }
@@ -307,30 +411,30 @@ const apiServer = http.createServer(async (req, res) => {
     // POST /queue — add products to the creation queue visually
     if (req.method === 'POST' && req.url === '/queue') {
       const { products } = await parseBody(req);
-      mainWindow.webContents.send('external-navigate', 'create');
-      mainWindow.webContents.send('external-queue', products);
-      mainWindow.focus();
+      sendToWindow('external-navigate', 'create');
+      sendToWindow('external-queue', products);
+      focusWindow();
       return sendJson(res, 200, { success: true, queued: products.length });
     }
 
     // POST /create — trigger creation of queued products and wait for results
     if (req.method === 'POST' && req.url === '/create') {
       const { universeId, products } = await parseBody(req);
-      mainWindow.webContents.send('external-navigate', 'create');
-      mainWindow.webContents.send('external-queue', products);
-      mainWindow.focus();
+      sendToWindow('external-navigate', 'create');
+      sendToWindow('external-queue', products);
+      focusWindow();
 
       // Small delay so the UI shows the queue before starting
       await new Promise((r) => setTimeout(r, 500));
 
       // Trigger bulk creation and collect results
       const result = await robloxApi.bulkCreate(universeId, products, (progress) => {
-        mainWindow.webContents.send('bulk-progress', progress);
-        mainWindow.webContents.send('external-progress', progress);
+        sendToWindow('bulk-progress', progress);
+        sendToWindow('external-progress', progress);
       });
 
       // Tell renderer creation is done
-      mainWindow.webContents.send('external-create-done', result);
+      sendToWindow('external-create-done', result);
       return sendJson(res, 200, result);
     }
 
@@ -341,8 +445,8 @@ const apiServer = http.createServer(async (req, res) => {
       const pageToken = url.searchParams.get('pageToken');
       if (!universeId) return sendJson(res, 400, { error: 'universeId required' });
 
-      mainWindow.webContents.send('external-navigate', 'manage');
-      mainWindow.focus();
+      sendToWindow('external-navigate', 'manage');
+      focusWindow();
 
       const allProducts = [];
       let token = pageToken || null;
@@ -361,7 +465,7 @@ const apiServer = http.createServer(async (req, res) => {
       const { cookie } = await parseBody(req);
       const result = await robloxApi.validateCookie(cookie);
       if (result.success) {
-        mainWindow.webContents.send('external-authenticated', result);
+        sendToWindow('external-authenticated', result);
       }
       return sendJson(res, 200, result);
     }
@@ -386,6 +490,14 @@ const apiServer = http.createServer(async (req, res) => {
     sendJson(res, 404, { error: 'Not found' });
   } catch (err) {
     sendJson(res, 500, { error: err.message });
+  }
+});
+
+apiServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`MCP API port ${API_PORT} is already in use — another instance may be running.`);
+  } else {
+    console.log('MCP API server error:', err.message);
   }
 });
 

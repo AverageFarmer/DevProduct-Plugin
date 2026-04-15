@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 const NAV_ITEMS = [
   { id: 'create', label: 'Create Products', icon: '+' },
@@ -7,21 +7,88 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ activeTab, onTabChange, isReady }) {
   const [version, setVersion] = useState('');
-  const [mcpRegistered, setMcpRegistered] = useState(false);
-  const [mcpSetupLoading, setMcpSetupLoading] = useState(false);
+  const [mcpStatus, setMcpStatus] = useState({ registered: false, healthy: false, issue: null });
+  const [mcpBusy, setMcpBusy] = useState(false);
+  const [mcpFlash, setMcpFlash] = useState(null);
+
+  const refreshMcp = useCallback(async () => {
+    const status = await window.api.checkMcpStatus();
+    setMcpStatus(status);
+    return status;
+  }, []);
 
   useEffect(() => {
     window.api.getAppVersion().then((v) => setVersion(v));
-    window.api.checkMcpStatus().then((s) => setMcpRegistered(s.registered));
-  }, []);
+    refreshMcp();
 
-  const handleSetupMcp = async () => {
-    setMcpSetupLoading(true);
+    // Re-check when the window regains focus — detects config drift after
+    // Claude Desktop updates, manual edits, or app reinstalls.
+    const onFocus = () => refreshMcp();
+    window.addEventListener('focus', onFocus);
+
+    // Also poll periodically so the indicator stays live.
+    const interval = setInterval(refreshMcp, 30000);
+
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
+  }, [refreshMcp]);
+
+  const handleReconnect = async () => {
+    setMcpBusy(true);
+    setMcpFlash(null);
     const result = await window.api.setupMcp();
-    if (result.success) {
-      setMcpRegistered(true);
+    const status = await refreshMcp();
+    setMcpBusy(false);
+
+    if (result.success && status.healthy) {
+      setMcpFlash({ type: 'success', text: 'MCP reconnected. Restart Claude Desktop to apply.' });
+    } else {
+      setMcpFlash({ type: 'error', text: result.error || status.issue || 'Reconnect failed.' });
     }
-    setMcpSetupLoading(false);
+    setTimeout(() => setMcpFlash(null), 5000);
+  };
+
+  const renderMcpPanel = () => {
+    if (!mcpStatus.registered) {
+      return (
+        <button className="btn btn-mcp" onClick={handleReconnect} disabled={mcpBusy}>
+          {mcpBusy ? 'Setting up...' : 'Setup Claude MCP'}
+        </button>
+      );
+    }
+
+    if (!mcpStatus.healthy) {
+      return (
+        <>
+          <div className="mcp-status broken" title={mcpStatus.issue || ''}>
+            <span className="mcp-dot"></span>
+            <span className="mcp-label">MCP needs reconnection</span>
+          </div>
+          {mcpStatus.issue && <div className="mcp-issue">{mcpStatus.issue}</div>}
+          <button className="btn btn-mcp" onClick={handleReconnect} disabled={mcpBusy}>
+            {mcpBusy ? 'Reconnecting...' : 'Reconnect MCP'}
+          </button>
+        </>
+      );
+    }
+
+    return (
+      <div className="mcp-status connected">
+        <span className="mcp-dot"></span>
+        <span className="mcp-label">MCP Connected</span>
+        <button
+          className="mcp-reconnect"
+          onClick={handleReconnect}
+          disabled={mcpBusy}
+          title="Reconnect MCP"
+          aria-label="Reconnect MCP"
+        >
+          {mcpBusy ? '...' : '\u21bb'}
+        </button>
+      </div>
+    );
   };
 
   return (
@@ -44,19 +111,9 @@ export default function Sidebar({ activeTab, onTabChange, isReady }) {
         ))}
       </nav>
       <div className="sidebar-footer">
-        {mcpRegistered ? (
-          <div className="mcp-status connected">
-            <span className="mcp-dot"></span>
-            <span>MCP Connected</span>
-          </div>
-        ) : (
-          <button
-            className="btn btn-mcp"
-            onClick={handleSetupMcp}
-            disabled={mcpSetupLoading}
-          >
-            {mcpSetupLoading ? 'Setting up...' : 'Setup Claude MCP'}
-          </button>
+        {renderMcpPanel()}
+        {mcpFlash && (
+          <div className={`mcp-flash ${mcpFlash.type}`}>{mcpFlash.text}</div>
         )}
         <span className="version">v{version}</span>
       </div>

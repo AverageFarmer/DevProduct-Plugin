@@ -163,8 +163,33 @@ body {
   color: var(--text-secondary);
 }
 
+.mcp-status .mcp-label {
+  flex: 1;
+}
+
 .mcp-status.connected {
   color: var(--success);
+}
+
+.mcp-status.broken {
+  color: #f59e0b;
+}
+
+.mcp-status.broken .mcp-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+  animation: mcp-pulse 1.6s ease-in-out infinite;
+}
+
+.mcp-issue {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+@keyframes mcp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 .mcp-dot {
@@ -173,6 +198,53 @@ body {
   border-radius: 50%;
   background: var(--success);
   box-shadow: 0 0 6px rgba(52, 211, 153, 0.5);
+}
+
+.mcp-reconnect {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.mcp-reconnect:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.mcp-reconnect:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mcp-flash {
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.mcp-flash.success {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--success);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.mcp-flash.error {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .mcp-status.unavailable {
