@@ -3,6 +3,12 @@ const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const robloxApi = require('./roblox-api');
 
+// Preserve the userData folder from before the rename so existing users keep
+// their encrypted cookie and saved places. Must run before app.whenReady().
+// Electron defaults userData to `<appData>/<productName>`; we pin it to the
+// legacy name. Leaves the appId and updater channel untouched.
+app.setPath('userData', path.join(app.getPath('appData'), 'DevProduct Bulk Creator'));
+
 let mainWindow;
 
 // ── Auto Updater ──
@@ -49,7 +55,7 @@ function createWindow() {
     height: 750,
     minWidth: 900,
     minHeight: 600,
-    title: 'DevProduct Bulk Creator',
+    title: 'Roblox Product Manager',
     icon: path.join(__dirname, '..', 'icon.ico'),
     backgroundColor: '#1a1a2e',
     webPreferences: {
@@ -223,7 +229,7 @@ ipcMain.handle('check-mcp-status', () => {
         healthy: false,
         configPath,
         expectedPath,
-        issue: 'DevProduct MCP is not registered in Claude Desktop.',
+        issue: 'Roblox Product Manager MCP is not registered in Claude Desktop.',
       };
     }
 
@@ -341,6 +347,30 @@ ipcMain.handle('cancel-bulk', async () => {
   robloxApi.cancelBulk();
 });
 
+// ── Gamepass IPC ──
+
+ipcMain.handle('list-gamepasses', async (_, universeId, pageToken) => {
+  return robloxApi.listGamepasses(universeId, pageToken);
+});
+
+ipcMain.handle('create-gamepass', async (_, universeId, gamepass) => {
+  return robloxApi.createGamepass(universeId, gamepass);
+});
+
+ipcMain.handle('update-gamepass', async (_, universeId, gamepassId, fields) => {
+  return robloxApi.updateGamepass(universeId, gamepassId, fields);
+});
+
+ipcMain.handle('bulk-create-gamepasses', async (_, universeId, gamepasses) => {
+  return robloxApi.bulkCreateGamepasses(universeId, gamepasses, (progress) => {
+    sendToWindow('bulk-gamepass-progress', progress);
+  });
+});
+
+ipcMain.handle('cancel-bulk-gamepasses', async () => {
+  robloxApi.cancelBulkGamepasses();
+});
+
 // ── Local HTTP API for MCP Server ──
 
 const http = require('http');
@@ -411,7 +441,7 @@ const apiServer = http.createServer(async (req, res) => {
     // POST /queue — add products to the creation queue visually
     if (req.method === 'POST' && req.url === '/queue') {
       const { products } = await parseBody(req);
-      sendToWindow('external-navigate', 'create');
+      sendToWindow('external-navigate', 'products-create');
       sendToWindow('external-queue', products);
       focusWindow();
       return sendJson(res, 200, { success: true, queued: products.length });
@@ -420,7 +450,7 @@ const apiServer = http.createServer(async (req, res) => {
     // POST /create — trigger creation of queued products and wait for results
     if (req.method === 'POST' && req.url === '/create') {
       const { universeId, products } = await parseBody(req);
-      sendToWindow('external-navigate', 'create');
+      sendToWindow('external-navigate', 'products-create');
       sendToWindow('external-queue', products);
       focusWindow();
 
@@ -445,7 +475,7 @@ const apiServer = http.createServer(async (req, res) => {
       const pageToken = url.searchParams.get('pageToken');
       if (!universeId) return sendJson(res, 400, { error: 'universeId required' });
 
-      sendToWindow('external-navigate', 'manage');
+      sendToWindow('external-navigate', 'products-manage');
       focusWindow();
 
       const allProducts = [];
@@ -474,6 +504,62 @@ const apiServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/update-product') {
       const { universeId, productId, fields } = await parseBody(req);
       const result = await robloxApi.updateProduct(universeId, productId, fields);
+      return sendJson(res, 200, result);
+    }
+
+    // GET /gamepasses — list existing gamepasses
+    if (req.method === 'GET' && req.url.startsWith('/gamepasses')) {
+      const url = new URL(req.url, 'http://localhost');
+      const universeId = url.searchParams.get('universeId');
+      const pageToken = url.searchParams.get('pageToken');
+      if (!universeId) return sendJson(res, 400, { error: 'universeId required' });
+
+      sendToWindow('external-navigate', 'gamepasses-manage');
+      focusWindow();
+
+      const allGamepasses = [];
+      let token = pageToken || null;
+      do {
+        const result = await robloxApi.listGamepasses(universeId, token);
+        if (!result.success) return sendJson(res, 500, result);
+        allGamepasses.push(...result.gamepasses);
+        token = result.nextPageToken;
+      } while (token);
+
+      return sendJson(res, 200, { success: true, gamepasses: allGamepasses });
+    }
+
+    // POST /queue-gamepasses — add gamepasses to the creation queue visually
+    if (req.method === 'POST' && req.url === '/queue-gamepasses') {
+      const { gamepasses } = await parseBody(req);
+      sendToWindow('external-navigate', 'gamepasses-create');
+      sendToWindow('external-gamepass-queue', gamepasses);
+      focusWindow();
+      return sendJson(res, 200, { success: true, queued: gamepasses.length });
+    }
+
+    // POST /create-gamepasses — queue and create gamepasses, wait for results
+    if (req.method === 'POST' && req.url === '/create-gamepasses') {
+      const { universeId, gamepasses } = await parseBody(req);
+      sendToWindow('external-navigate', 'gamepasses-create');
+      sendToWindow('external-gamepass-queue', gamepasses);
+      focusWindow();
+
+      await new Promise((r) => setTimeout(r, 500));
+
+      const result = await robloxApi.bulkCreateGamepasses(universeId, gamepasses, (progress) => {
+        sendToWindow('bulk-gamepass-progress', progress);
+        sendToWindow('external-gamepass-progress', progress);
+      });
+
+      sendToWindow('external-gamepass-create-done', result);
+      return sendJson(res, 200, result);
+    }
+
+    // POST /update-gamepass
+    if (req.method === 'POST' && req.url === '/update-gamepass') {
+      const { universeId, gamepassId, fields } = await parseBody(req);
+      const result = await robloxApi.updateGamepass(universeId, gamepassId, fields);
       return sendJson(res, 200, result);
     }
 

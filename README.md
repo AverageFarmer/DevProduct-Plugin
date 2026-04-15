@@ -1,6 +1,6 @@
-# DevProduct Bulk Creator
+# Roblox Product Manager
 
-A desktop app for creating and managing Roblox Developer Products in bulk. Built with Electron + React.
+A desktop app for creating and managing Roblox Developer Products and Gamepasses in bulk. Built with Electron + React.
 
 ## Features
 
@@ -45,7 +45,7 @@ refresh the config to the new install location.
 ### MCP Requirements
 
 - [Claude Desktop](https://claude.ai/download) or [Claude Code](https://claude.ai/claude-code) installed
-- The DevProduct app (auto-launches when Claude calls a tool; you can also open it first)
+- Roblox Product Manager (auto-launches when Claude calls a tool; you can also open it first)
 - You must be logged in to the app
 
 ### MCP Tools
@@ -56,8 +56,11 @@ refresh the config to the new install location.
 | `set-cookie` | Log in to the app |
 | `set-place` | Load a game by Place ID |
 | `list-products` | List all existing developer products |
-| `create-products` | Create products in bulk (visible in the app UI) |
-| `update-product` | Update an existing product |
+| `create-products` | Create developer products in bulk (visible in the app UI) |
+| `update-product` | Update an existing developer product |
+| `list-gamepasses` | List all existing gamepasses |
+| `create-gamepasses` | Create gamepasses in bulk (visible in the app UI) |
+| `update-gamepass` | Update an existing gamepass (name/price/description/isForSale) |
 
 ### Example Usage
 
@@ -67,7 +70,7 @@ Tell Claude Code something like:
 
 Claude will:
 1. Read your game code via Roblox Studio
-2. Open the DevProduct app and load your game
+2. Open Roblox Product Manager and load your game
 3. Create the products (you'll see them appear in the app)
 4. Return the product IDs as a Lua table
 5. Update your game code with the IDs

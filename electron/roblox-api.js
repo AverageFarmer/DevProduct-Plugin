@@ -7,6 +7,7 @@ const path = require('path');
 let storedCookie = null;
 let csrfToken = null;
 let bulkCancelled = false;
+let bulkGamepassCancelled = false;
 
 // ── Cookie Persistence (encrypted on disk) ──
 
@@ -354,6 +355,178 @@ function cancelBulk() {
   bulkCancelled = true;
 }
 
+// ── Gamepasses ──
+
+function buildGamepassMultipart(fields, filePath, fileFieldName = 'imageFile') {
+  const boundary = '----FormBoundary' + Math.random().toString(36).substring(2);
+  const parts = [];
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null) continue;
+    parts.push(
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`)
+    );
+  }
+
+  if (filePath && fs.existsSync(filePath)) {
+    const fileName = path.basename(filePath);
+    const fileData = fs.readFileSync(filePath);
+    parts.push(
+      Buffer.from(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${fileFieldName}"; filename="${fileName}"\r\nContent-Type: image/png\r\n\r\n`
+      )
+    );
+    parts.push(fileData);
+    parts.push(Buffer.from('\r\n'));
+  }
+
+  parts.push(Buffer.from(`--${boundary}--\r\n`));
+
+  return { body: Buffer.concat(parts), contentType: `multipart/form-data; boundary=${boundary}` };
+}
+
+async function listGamepasses(universeId, pageToken) {
+  try {
+    let url = `https://apis.roblox.com/game-passes/v1/universes/${universeId}/game-passes/creator?pageSize=50`;
+    if (pageToken) {
+      url += `&pageToken=${encodeURIComponent(pageToken)}`;
+    }
+
+    const res = await apiRequest(url, { method: 'GET' });
+
+    if (res.status === 200) {
+      const data = res.json();
+      const gamepasses = (data.gamePasses || data.gamepasses || []).map((g) => ({
+        gamepassId: g.gamePassId || g.gamepassId || g.id,
+        name: g.name || g.displayName,
+        price: (g.priceInformation && g.priceInformation.defaultPriceInRobux) ?? g.price ?? g.defaultPrice ?? null,
+        description: g.description || '',
+        isForSale: g.isForSale ?? g.isForSaleEnabled ?? false,
+        iconImageAssetId: g.iconImageAssetId || null,
+        _raw: g,
+      }));
+      return {
+        success: true,
+        gamepasses,
+        nextPageToken: data.nextPageToken || null,
+      };
+    }
+
+    return { success: false, error: 'Failed to list gamepasses. Status: ' + res.status };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function createGamepass(universeId, gamepass) {
+  try {
+    const fields = { name: gamepass.name };
+    if (gamepass.description) fields.description = gamepass.description;
+    if (gamepass.price != null && gamepass.price > 0) {
+      fields.price = gamepass.price;
+      fields.isForSale = 'true';
+    }
+
+    const { body, contentType } = buildGamepassMultipart(fields, gamepass.imagePath, 'imageFile');
+
+    const res = await apiRequest(
+      `https://apis.roblox.com/game-passes/v1/universes/${universeId}/game-passes`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': contentType },
+        body,
+      }
+    );
+
+    if (res.status === 200 || res.status === 201) {
+      return { success: true, gamepass: res.json() };
+    }
+
+    const errorData = res.json();
+    return {
+      success: false,
+      error: (errorData && errorData.message) || 'Failed to create. Status: ' + res.status,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function updateGamepass(universeId, gamepassId, fields) {
+  try {
+    // PATCH endpoint accepts multipart with any of name/description/price/isForSale/file
+    const { imagePath, ...textFields } = fields;
+    // Coerce isForSale based on price changes if not explicitly set
+    if (textFields.price != null && textFields.isForSale === undefined && textFields.price > 0) {
+      textFields.isForSale = 'true';
+    }
+
+    const { body: payload, contentType } = buildGamepassMultipart(textFields, imagePath, 'file');
+
+    const res = await apiRequest(
+      `https://apis.roblox.com/game-passes/v1/universes/${universeId}/game-passes/${gamepassId}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': contentType },
+        body: payload,
+      }
+    );
+
+    if (res.status === 204 || res.status === 200) {
+      return { success: true };
+    }
+
+    const errorData = res.json();
+    return {
+      success: false,
+      error: (errorData && errorData.message) || 'Failed to update. Status: ' + res.status,
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+async function bulkCreateGamepasses(universeId, gamepasses, onProgress) {
+  bulkGamepassCancelled = false;
+  const results = [];
+
+  for (let i = 0; i < gamepasses.length; i++) {
+    if (bulkGamepassCancelled) {
+      onProgress({
+        current: i,
+        total: gamepasses.length,
+        status: 'cancelled',
+        results,
+      });
+      return { success: true, results, cancelled: true };
+    }
+
+    const gamepass = gamepasses[i];
+    const result = await createGamepass(universeId, gamepass);
+    results.push({ ...gamepass, ...result });
+
+    onProgress({
+      current: i + 1,
+      total: gamepasses.length,
+      status: result.success ? 'success' : 'error',
+      lastProduct: gamepass.name,
+      lastError: result.error || null,
+      results,
+    });
+
+    // Rate limit: 5 req/sec → ~250ms between requests (use 350ms to be safe)
+    if (i < gamepasses.length - 1) {
+      await sleep(350);
+    }
+  }
+
+  return { success: true, results, cancelled: false };
+}
+
+function cancelBulkGamepasses() {
+  bulkGamepassCancelled = true;
+}
+
 module.exports = {
   validateCookie,
   tryAutoLogin,
@@ -364,4 +537,9 @@ module.exports = {
   updateProduct,
   bulkCreate,
   cancelBulk,
+  listGamepasses,
+  createGamepass,
+  updateGamepass,
+  bulkCreateGamepasses,
+  cancelBulkGamepasses,
 };

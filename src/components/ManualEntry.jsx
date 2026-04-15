@@ -3,8 +3,9 @@ import ImagePicker from './ImagePicker';
 
 const emptyRow = () => ({ name: '', price: '', description: '', imagePath: null, id: Date.now() + Math.random() });
 
-export default function ManualEntry({ onProductsReady }) {
+export default function ManualEntry({ onProductsReady, itemLabel = 'product', requirePrice = true }) {
   const [rows, setRows] = useState([emptyRow(), emptyRow(), emptyRow()]);
+  const plural = itemLabel === 'gamepass' ? 'gamepasses' : `${itemLabel}s`;
 
   const updateRow = (index, field, value) => {
     const updated = [...rows];
@@ -24,10 +25,18 @@ export default function ManualEntry({ onProductsReady }) {
 
   const getValidProducts = () => {
     return rows
-      .filter((r) => r.name.trim() && r.price && !isNaN(r.price) && Number(r.price) > 0)
+      .filter((r) => {
+        if (!r.name.trim()) return false;
+        if (requirePrice) {
+          return r.price && !isNaN(r.price) && Number(r.price) > 0;
+        }
+        // Gamepasses: price is optional, but if provided must be a valid number
+        if (r.price && (isNaN(r.price) || Number(r.price) < 0)) return false;
+        return true;
+      })
       .map((r) => ({
         name: r.name.trim(),
-        price: parseInt(r.price, 10),
+        price: r.price ? parseInt(r.price, 10) : undefined,
         description: r.description.trim() || undefined,
         imagePath: r.imagePath || undefined,
       }));
@@ -42,7 +51,7 @@ export default function ManualEntry({ onProductsReady }) {
   return (
     <div className="manual-entry">
       <div className="entry-header">
-        <span className="entry-count">{validCount} valid product{validCount !== 1 ? 's' : ''}</span>
+        <span className="entry-count">{validCount} valid {validCount === 1 ? itemLabel : plural}</span>
         <div className="entry-actions">
           <button className="btn btn-small" onClick={() => addRows(1)}>+ Add Row</button>
           <button className="btn btn-small" onClick={() => addRows(10)}>+ Add 10</button>
@@ -74,15 +83,15 @@ export default function ManualEntry({ onProductsReady }) {
                 type="text"
                 value={row.name}
                 onChange={(e) => updateRow(i, 'name', e.target.value)}
-                placeholder="Product name"
+                placeholder={`${itemLabel[0].toUpperCase()}${itemLabel.slice(1)} name`}
               />
               <input
                 className="col-price"
                 type="number"
-                min="1"
+                min={requirePrice ? '1' : '0'}
                 value={row.price}
                 onChange={(e) => updateRow(i, 'price', e.target.value)}
-                placeholder="0"
+                placeholder={requirePrice ? '0' : 'optional'}
               />
               <input
                 className="col-desc"
@@ -108,7 +117,7 @@ export default function ManualEntry({ onProductsReady }) {
         onClick={handleAdd}
         disabled={validCount === 0}
       >
-        Add {validCount} Product{validCount !== 1 ? 's' : ''} to Queue
+        Add {validCount} {validCount === 1 ? itemLabel[0].toUpperCase() + itemLabel.slice(1) : plural[0].toUpperCase() + plural.slice(1)} to Queue
       </button>
     </div>
   );

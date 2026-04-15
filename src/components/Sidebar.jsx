@@ -1,8 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-const NAV_ITEMS = [
-  { id: 'create', label: 'Create Products', icon: '+' },
-  { id: 'manage', label: 'Manage Products', icon: '=' },
+const NAV_SECTIONS = [
+  {
+    heading: 'Developer Products',
+    items: [
+      { id: 'products-create', label: 'Create Products', icon: '+' },
+      { id: 'products-manage', label: 'Manage Products', icon: '=' },
+    ],
+  },
+  {
+    heading: 'Gamepasses',
+    items: [
+      { id: 'gamepasses-create', label: 'Create Gamepasses', icon: '+' },
+      { id: 'gamepasses-manage', label: 'Manage Gamepasses', icon: '=' },
+    ],
+  },
 ];
 
 export default function Sidebar({ activeTab, onTabChange, isReady }) {
@@ -94,20 +106,25 @@ export default function Sidebar({ activeTab, onTabChange, isReady }) {
   return (
     <div className="sidebar">
       <div className="sidebar-brand">
-        <h1>DevProduct</h1>
-        <span>Bulk Creator</span>
+        <h1>Roblox</h1>
+        <span>Product Manager</span>
       </div>
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.id}
-            className={`nav-item ${activeTab === item.id ? 'active' : ''} ${!isReady ? 'disabled' : ''}`}
-            onClick={() => isReady && onTabChange(item.id)}
-            disabled={!isReady}
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </button>
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.heading} className="nav-section">
+            <div className="nav-heading">{section.heading}</div>
+            {section.items.map((item) => (
+              <button
+                key={item.id}
+                className={`nav-item ${activeTab === item.id ? 'active' : ''} ${!isReady ? 'disabled' : ''}`}
+                onClick={() => isReady && onTabChange(item.id)}
+                disabled={!isReady}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </button>
+            ))}
+          </div>
         ))}
       </nav>
       <div className="sidebar-footer">

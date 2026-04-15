@@ -21,6 +21,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('bulk-progress', (_, progress) => callback(progress));
     return () => ipcRenderer.removeAllListeners('bulk-progress');
   },
+
+  // Gamepasses
+  listGamepasses: (universeId, pageToken) => ipcRenderer.invoke('list-gamepasses', universeId, pageToken),
+  createGamepass: (universeId, gamepass) => ipcRenderer.invoke('create-gamepass', universeId, gamepass),
+  updateGamepass: (universeId, gamepassId, fields) => ipcRenderer.invoke('update-gamepass', universeId, gamepassId, fields),
+  bulkCreateGamepasses: (universeId, gamepasses) => ipcRenderer.invoke('bulk-create-gamepasses', universeId, gamepasses),
+  cancelBulkGamepasses: () => ipcRenderer.invoke('cancel-bulk-gamepasses'),
+  onBulkGamepassProgress: (callback) => {
+    ipcRenderer.on('bulk-gamepass-progress', (_, progress) => callback(progress));
+    return () => ipcRenderer.removeAllListeners('bulk-gamepass-progress');
+  },
   onUpdateStatus: (callback) => {
     ipcRenderer.on('update-status', (_, status) => callback(status));
     return () => ipcRenderer.removeAllListeners('update-status');
@@ -52,5 +63,19 @@ contextBridge.exposeInMainWorld('api', {
   onExternalAuthenticated: (cb) => {
     ipcRenderer.on('external-authenticated', (_, user) => cb(user));
     return () => ipcRenderer.removeAllListeners('external-authenticated');
+  },
+
+  // Gamepass external control
+  onExternalGamepassQueue: (cb) => {
+    ipcRenderer.on('external-gamepass-queue', (_, gamepasses) => cb(gamepasses));
+    return () => ipcRenderer.removeAllListeners('external-gamepass-queue');
+  },
+  onExternalGamepassProgress: (cb) => {
+    ipcRenderer.on('external-gamepass-progress', (_, progress) => cb(progress));
+    return () => ipcRenderer.removeAllListeners('external-gamepass-progress');
+  },
+  onExternalGamepassCreateDone: (cb) => {
+    ipcRenderer.on('external-gamepass-create-done', (_, result) => cb(result));
+    return () => ipcRenderer.removeAllListeners('external-gamepass-create-done');
   },
 });

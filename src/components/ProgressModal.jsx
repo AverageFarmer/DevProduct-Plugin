@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 
-export default function ProgressModal({ products, universeId, onClose, onComplete }) {
+export default function ProgressModal({ products, universeId, onClose, onComplete, mode = 'products' }) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(null);
   const [done, setDone] = useState(false);
   const [results, setResults] = useState([]);
 
+  const isGamepass = mode === 'gamepasses';
+  const itemLabel = isGamepass ? 'gamepass' : 'developer product';
+
   useEffect(() => {
-    const cleanup = window.api.onBulkProgress((prog) => {
+    const subscribe = isGamepass ? window.api.onBulkGamepassProgress : window.api.onBulkProgress;
+    const cleanup = subscribe((prog) => {
       setProgress(prog);
       setResults(prog.results || []);
 
@@ -18,19 +22,27 @@ export default function ProgressModal({ products, universeId, onClose, onComplet
     });
 
     return cleanup;
-  }, []);
+  }, [isGamepass]);
 
   const handleStart = async () => {
     setRunning(true);
     setDone(false);
     setResults([]);
-    await window.api.bulkCreate(universeId, products);
+    if (isGamepass) {
+      await window.api.bulkCreateGamepasses(universeId, products);
+    } else {
+      await window.api.bulkCreate(universeId, products);
+    }
     setDone(true);
     setRunning(false);
   };
 
   const handleCancel = () => {
-    window.api.cancelBulk();
+    if (isGamepass) {
+      window.api.cancelBulkGamepasses();
+    } else {
+      window.api.cancelBulk();
+    }
   };
 
   const handleDone = () => {
@@ -46,13 +58,13 @@ export default function ProgressModal({ products, universeId, onClose, onComplet
     <div className="modal-overlay">
       <div className="modal">
         <div className="modal-header">
-          <h2>{done ? 'Complete' : running ? 'Creating Products...' : 'Ready to Create'}</h2>
+          <h2>{done ? 'Complete' : running ? `Creating ${isGamepass ? 'Gamepasses' : 'Products'}...` : 'Ready to Create'}</h2>
           {!running && <button className="btn-icon" onClick={onClose}>x</button>}
         </div>
 
         {!running && !done && (
           <div className="modal-body">
-            <p>Ready to create <strong>{products.length}</strong> developer product{products.length !== 1 ? 's' : ''}.</p>
+            <p>Ready to create <strong>{products.length}</strong> {itemLabel}{products.length !== 1 ? 's' : ''}.</p>
             <p className="hint">Estimated time: ~{Math.ceil(products.length * 0.4)} seconds</p>
             <div className="modal-actions">
               <button className="btn btn-primary" onClick={handleStart}>Start Creating</button>
@@ -93,7 +105,7 @@ export default function ProgressModal({ products, universeId, onClose, onComplet
 
             {failCount > 0 && (
               <div className="results-log">
-                <h4>Failed Products:</h4>
+                <h4>Failed {isGamepass ? 'Gamepasses' : 'Products'}:</h4>
                 {results.filter((r) => !r.success).map((r, i) => (
                   <div key={i} className="log-entry error">
                     <span>{r.name}</span>

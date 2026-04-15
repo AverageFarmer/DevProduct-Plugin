@@ -119,6 +119,31 @@ body {
   font-weight: bold;
 }
 
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section + .nav-section {
+  margin-top: 10px;
+}
+
+.nav-heading {
+  padding: 8px 14px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pcol-price .muted {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 12px;
+}
+
 .sidebar-footer {
   padding: 12px 14px;
   border-top: 1px solid var(--border);

@@ -4,28 +4,40 @@ import AuthPanel from './components/AuthPanel';
 import PlaceSelector from './components/PlaceSelector';
 import BulkCreator from './components/BulkCreator';
 import ProductList from './components/ProductList';
+import BulkGamepassCreator from './components/BulkGamepassCreator';
+import GamepassList from './components/GamepassList';
+
+// Accept legacy tab IDs sent by older MCP servers ('create', 'manage')
+const LEGACY_TAB_MAP = {
+  create: 'products-create',
+  manage: 'products-manage',
+};
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [place, setPlace] = useState(null);
-  const [activeTab, setActiveTab] = useState('create');
+  const [activeTab, setActiveTab] = useState('products-create');
   const [updateStatus, setUpdateStatus] = useState(null);
   const [externalQueue, setExternalQueue] = useState(null);
+  const [externalGamepassQueue, setExternalGamepassQueue] = useState(null);
 
   useEffect(() => {
     const cleanups = [
       window.api.onUpdateStatus((status) => setUpdateStatus(status)),
 
       // External control from MCP server
-      window.api.onExternalNavigate((tab) => setActiveTab(tab)),
+      window.api.onExternalNavigate((tab) => setActiveTab(LEGACY_TAB_MAP[tab] || tab)),
       window.api.onExternalSetPlace((placeData) => {
         setPlace(placeData);
-        // Also save to recent places
         window.api.savePlace(placeData);
       }),
       window.api.onExternalQueue((products) => {
-        setActiveTab('create');
+        setActiveTab('products-create');
         setExternalQueue(products);
+      }),
+      window.api.onExternalGamepassQueue((gamepasses) => {
+        setActiveTab('gamepasses-create');
+        setExternalGamepassQueue(gamepasses);
       }),
       window.api.onExternalAuthenticated((userData) => {
         setUser(userData);
@@ -35,8 +47,8 @@ export default function App() {
     return () => cleanups.forEach((fn) => fn());
   }, []);
 
-  // Clear external queue after BulkCreator picks it up
   const handleExternalQueueConsumed = () => setExternalQueue(null);
+  const handleExternalGamepassQueueConsumed = () => setExternalGamepassQueue(null);
 
   const isReady = !!(user && place);
 
@@ -82,7 +94,7 @@ export default function App() {
 
         {!user && (
           <div className="welcome-state">
-            <h2>Welcome to DevProduct Bulk Creator</h2>
+            <h2>Welcome to Roblox Product Manager</h2>
             <p>Paste your .ROBLOSECURITY cookie above to get started.</p>
           </div>
         )}
@@ -94,7 +106,7 @@ export default function App() {
           </div>
         )}
 
-        {isReady && activeTab === 'create' && (
+        {isReady && activeTab === 'products-create' && (
           <BulkCreator
             universeId={place.universeId}
             externalQueue={externalQueue}
@@ -102,8 +114,20 @@ export default function App() {
           />
         )}
 
-        {isReady && activeTab === 'manage' && (
+        {isReady && activeTab === 'products-manage' && (
           <ProductList universeId={place.universeId} />
+        )}
+
+        {isReady && activeTab === 'gamepasses-create' && (
+          <BulkGamepassCreator
+            universeId={place.universeId}
+            externalQueue={externalGamepassQueue}
+            onExternalQueueConsumed={handleExternalGamepassQueueConsumed}
+          />
+        )}
+
+        {isReady && activeTab === 'gamepasses-manage' && (
+          <GamepassList universeId={place.universeId} />
         )}
       </main>
     </div>

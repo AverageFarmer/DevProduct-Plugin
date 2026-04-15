@@ -19,7 +19,7 @@ console.log('');
 // Check mcp-server.js exists
 if (!fs.existsSync(serverPath)) {
   console.log('ERROR: mcp-server.js not found at ' + serverPath);
-  console.log('Make sure you run this from the DevProduct Plugin folder.');
+  console.log('Make sure you run this from the Roblox Product Manager folder.');
   process.exit(1);
 }
 
@@ -57,9 +57,9 @@ config.mcpServers.devproduct = {
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
 if (alreadyExists) {
-  console.log('Updated DevProduct MCP server config.');
+  console.log('Updated Roblox Product Manager MCP server config.');
 } else {
-  console.log('Added DevProduct MCP server to config.');
+  console.log('Added Roblox Product Manager MCP server to config.');
 }
 
 console.log('');

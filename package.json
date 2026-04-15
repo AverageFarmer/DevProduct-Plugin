@@ -1,7 +1,7 @@
 {
   "name": "devproduct-bulk-creator",
-  "version": "1.0.0",
-  "description": "Bulk create and manage Roblox Developer Products",
+  "version": "1.0.1",
+  "description": "Bulk create and manage Roblox Developer Products and Gamepasses",
   "main": "electron/main.js",
   "author": "Dizzy (Dvyz)",
   "scripts": {
@@ -14,7 +14,7 @@
   },
   "build": {
     "appId": "com.devproduct.bulkcreator",
-    "productName": "DevProduct Bulk Creator",
+    "productName": "Roblox Product Manager",
     "win": {
       "target": "nsis",
       "icon": "icon.ico"

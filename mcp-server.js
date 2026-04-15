@@ -34,22 +34,29 @@ function isAppRunning() {
 }
 
 function findInstalledExe() {
-  const isDevProductExe = (p) =>
-    p && /devproduct bulk creator\.exe$/i.test(p) && fs.existsSync(p);
+  // Accept both the current and legacy exe names so users upgrading from an
+  // older install are still auto-launched correctly.
+  const isProductExe = (p) =>
+    p && /(roblox product manager|devproduct bulk creator)\.exe$/i.test(p) && fs.existsSync(p);
 
   // 1. Honor the exact path the app wrote into the config env (most reliable),
   //    but only if it actually points at the product binary (not dev electron.exe).
   const fromEnv = process.env.DEVPRODUCT_APP_PATH;
-  if (isDevProductExe(fromEnv)) return fromEnv;
+  if (isProductExe(fromEnv)) return fromEnv;
 
   // 2. Try common NSIS install locations as a fallback.
-  const candidates = [
-    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
-    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
-    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'DevProduct Bulk Creator', 'DevProduct Bulk Creator.exe'),
+  const roots = [
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs') : '',
+    process.env.ProgramFiles || 'C:\\Program Files',
+    process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
   ];
-  for (const candidate of candidates) {
-    if (isDevProductExe(candidate)) return candidate;
+  const folderNames = ['Roblox Product Manager', 'DevProduct Bulk Creator'];
+  for (const root of roots) {
+    if (!root) continue;
+    for (const folder of folderNames) {
+      const candidate = path.join(root, folder, `${folder}.exe`);
+      if (isProductExe(candidate)) return candidate;
+    }
   }
   return null;
 }
@@ -74,8 +81,8 @@ async function ensureAppRunning() {
     });
   } else {
     throw new Error(
-      'DevProduct app is not running and its install location could not be found. ' +
-      'Please open the DevProduct Bulk Creator app manually.'
+      'Roblox Product Manager is not running and its install location could not be found. ' +
+      'Please open the Roblox Product Manager app manually.'
     );
   }
   appProcess.unref();
@@ -85,7 +92,7 @@ async function ensureAppRunning() {
     await new Promise((r) => setTimeout(r, 500));
     if (await isAppRunning()) return;
   }
-  throw new Error('DevProduct app failed to start within 15 seconds.');
+  throw new Error('Roblox Product Manager failed to start within 15 seconds.');
 }
 
 // ── HTTP helper to talk to the Electron app ──
@@ -122,7 +129,7 @@ async function appRequest(method, urlPath, body) {
 
     req.on('error', (err) => {
       reject(new Error(
-        `Cannot connect to DevProduct app. (${err.message})`
+        `Cannot connect to Roblox Product Manager. (${err.message})`
       ));
     });
 
@@ -144,7 +151,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'set-cookie',
       description:
-        'Validate and set the .ROBLOSECURITY cookie in the DevProduct app. Call this first if the app is not already logged in.',
+        'Validate and set the .ROBLOSECURITY cookie in Roblox Product Manager. Call this first if the app is not already logged in.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -156,7 +163,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'set-place',
       description:
-        'Load a Roblox game by Place ID in the DevProduct app. The app will resolve the Universe ID and show the game name.',
+        'Load a Roblox game by Place ID in Roblox Product Manager. The app will resolve the Universe ID and show the game name.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -220,10 +227,63 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: 'app-status',
       description:
-        'Check if the DevProduct app is running and whether the user is logged in.',
+        'Check if Roblox Product Manager is running and whether the user is logged in.',
       inputSchema: {
         type: 'object',
         properties: {},
+      },
+    },
+    {
+      name: 'list-gamepasses',
+      description:
+        'List all existing gamepasses for a universe. Switches the app to the Manage Gamepasses tab. Returns all gamepasses with their IDs, names, prices, and sale status.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          universeId: { type: 'string', description: 'The Roblox Universe ID' },
+        },
+        required: ['universeId'],
+      },
+    },
+    {
+      name: 'create-gamepasses',
+      description:
+        'Create gamepasses in bulk. Adds them to the queue visually in the app, then creates them. Returns the gamepass IDs. Gamepasses are created WITHOUT an icon (the developer can upload icons later in Roblox.com or via the app UI). Set price to 0 or omit it to create an unpublished gamepass.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          universeId: { type: 'string', description: 'The Roblox Universe ID' },
+          gamepasses: {
+            type: 'array',
+            description: 'Array of gamepasses to create',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Gamepass name' },
+                price: { type: 'number', description: 'Price in Robux (omit or set to 0 to create unpublished)' },
+                description: { type: 'string', description: 'Optional description' },
+              },
+              required: ['name'],
+            },
+          },
+        },
+        required: ['universeId', 'gamepasses'],
+      },
+    },
+    {
+      name: 'update-gamepass',
+      description: 'Update an existing gamepass (name, price, description, or sale status).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          universeId: { type: 'string', description: 'The Roblox Universe ID' },
+          gamepassId: { type: 'string', description: 'The gamepass ID to update' },
+          name: { type: 'string', description: 'New name (optional)' },
+          price: { type: 'number', description: 'New price in Robux (optional)' },
+          description: { type: 'string', description: 'New description (optional)' },
+          isForSale: { type: 'boolean', description: 'Whether the gamepass is for sale (optional)' },
+        },
+        required: ['universeId', 'gamepassId'],
       },
     },
   ],
@@ -367,6 +427,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (result.success) {
           return {
             content: [{ type: 'text', text: `Product ${args.productId} updated successfully.` }],
+          };
+        }
+        return {
+          content: [{ type: 'text', text: `Failed to update: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      case 'list-gamepasses': {
+        const result = await appRequest(
+          'GET',
+          `/gamepasses?universeId=${args.universeId}`
+        );
+        if (result.success) {
+          if (result.gamepasses.length === 0) {
+            return {
+              content: [{ type: 'text', text: 'No gamepasses found for this game.' }],
+            };
+          }
+          const table = result.gamepasses
+            .map((g) => {
+              const price = g.price != null ? `R$ ${g.price}` : 'unpublished';
+              return `["${g.name}"] = ${g.gamepassId}, -- ${price}`;
+            })
+            .join('\n');
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Found ${result.gamepasses.length} gamepasses:\n\n${table}`,
+              },
+            ],
+          };
+        }
+        return {
+          content: [{ type: 'text', text: `Failed to list gamepasses: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      case 'create-gamepasses': {
+        const result = await appRequest('POST', '/create-gamepasses', {
+          universeId: args.universeId,
+          gamepasses: args.gamepasses,
+        });
+
+        if (result.success) {
+          const succeeded = result.results.filter((r) => r.success);
+          const failed = result.results.filter((r) => !r.success);
+
+          let text = `Created ${succeeded.length} of ${result.results.length} gamepasses.\n\n`;
+
+          if (succeeded.length > 0) {
+            text += 'Lua table:\n```lua\nreturn {\n';
+            text += succeeded
+              .map((r) => `\t["${r.name}"] = ${(r.gamepass && (r.gamepass.gamePassId || r.gamepass.id)) || '?'},`)
+              .join('\n');
+            text += '\n}\n```\n';
+          }
+
+          if (failed.length > 0) {
+            text += `\nFailed gamepasses:\n`;
+            text += failed.map((r) => `- ${r.name}: ${r.error}`).join('\n');
+          }
+
+          return { content: [{ type: 'text', text }] };
+        }
+        return {
+          content: [{ type: 'text', text: `Bulk create failed: ${result.error}` }],
+          isError: true,
+        };
+      }
+
+      case 'update-gamepass': {
+        const fields = {};
+        if (args.name) fields.name = args.name;
+        if (args.price != null) fields.price = args.price;
+        if (args.description !== undefined) fields.description = args.description;
+        if (args.isForSale !== undefined) fields.isForSale = args.isForSale ? 'true' : 'false';
+
+        const result = await appRequest('POST', '/update-gamepass', {
+          universeId: args.universeId,
+          gamepassId: args.gamepassId,
+          fields,
+        });
+
+        if (result.success) {
+          return {
+            content: [{ type: 'text', text: `Gamepass ${args.gamepassId} updated successfully.` }],
           };
         }
         return {

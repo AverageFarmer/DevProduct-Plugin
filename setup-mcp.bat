@@ -1,7 +1,7 @@
 @echo off
 cd /d "%~dp0"
 echo ================================
-echo  DevProduct MCP Server Setup
+echo  Roblox Product Manager MCP Setup
 echo ================================
 echo.
 node setup-mcp.js "%~dp0"
