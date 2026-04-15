@@ -141,9 +141,72 @@ ipcMain.handle('get-app-version', () => {
 
 // ── MCP Setup (writes to claude_desktop_config.json directly) ──
 
+// Claude Desktop can be installed two ways on Windows:
+//   1. MSIX / Microsoft Store — sandboxed to
+//      %LOCALAPPDATA%\Packages\Claude_<publisherHash>\LocalCache\Roaming\Claude\
+//   2. Traditional installer — %APPDATA%\Claude\
+// We prefer whichever one actually has a Claude folder present. If both exist
+// (rare), MSIX wins because that's what Claude Desktop actually reads from when
+// installed via the Store.
+function getClaudeConfigCandidates() {
+  const home = require('os').homedir();
+  const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+  const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+
+  const candidates = [];
+
+  // MSIX installs — scan %LOCALAPPDATA%\Packages for any Claude_* folder so
+  // we don't hard-code a single publisher hash.
+  const packagesDir = path.join(local, 'Packages');
+  if (fs.existsSync(packagesDir)) {
+    try {
+      for (const entry of fs.readdirSync(packagesDir)) {
+        if (/^(Claude|AnthropicPBC\.Claude)_/i.test(entry)) {
+          candidates.push({
+            kind: 'msix',
+            package: entry,
+            configPath: path.join(
+              packagesDir,
+              entry,
+              'LocalCache',
+              'Roaming',
+              'Claude',
+              'claude_desktop_config.json'
+            ),
+          });
+        }
+      }
+    } catch (e) {
+      // Directory not readable — ignore and fall through.
+    }
+  }
+
+  // Traditional installer
+  candidates.push({
+    kind: 'traditional',
+    configPath: path.join(appData, 'Claude', 'claude_desktop_config.json'),
+  });
+
+  return candidates;
+}
+
 function getClaudeConfigPath() {
-  const appData = process.env.APPDATA || path.join(require('os').homedir(), 'AppData', 'Roaming');
-  return path.join(appData, 'Claude', 'claude_desktop_config.json');
+  const candidates = getClaudeConfigCandidates();
+
+  // Prefer a candidate whose Claude folder already exists (Claude Desktop
+  // creates this on first launch, so existence is a reliable "this install is
+  // what the user is actually running" signal).
+  for (const c of candidates) {
+    if (fs.existsSync(path.dirname(c.configPath))) {
+      return c.configPath;
+    }
+  }
+
+  // No Claude folder exists anywhere — fall back to the traditional path and
+  // let the setup handler create it. Worst case: the user installed from the
+  // Store but hasn't launched Claude Desktop yet; re-running setup after
+  // launching Claude Desktop once will pick up the correct MSIX path.
+  return candidates[candidates.length - 1].configPath;
 }
 
 function getMcpServerPath() {
@@ -254,6 +317,32 @@ ipcMain.handle('check-mcp-status', () => {
   }
 });
 
+// Remove the `devproduct` entry from any config that isn't the active one.
+// Prevents stale entries in the traditional location from haunting users who
+// are actually running the MSIX Claude Desktop (or vice versa).
+function pruneStaleMcpConfigs(activeConfigPath) {
+  const normalize = (p) => path.resolve(p).toLowerCase();
+  const activeNormalized = normalize(activeConfigPath);
+
+  for (const candidate of getClaudeConfigCandidates()) {
+    if (normalize(candidate.configPath) === activeNormalized) continue;
+    if (!fs.existsSync(candidate.configPath)) continue;
+
+    try {
+      const raw = fs.readFileSync(candidate.configPath, 'utf8');
+      const config = JSON.parse(raw);
+      if (config.mcpServers && config.mcpServers.devproduct) {
+        delete config.mcpServers.devproduct;
+        fs.writeFileSync(candidate.configPath, JSON.stringify(config, null, 2));
+        console.log('Removed stale devproduct entry from:', candidate.configPath);
+      }
+    } catch (e) {
+      // Non-fatal — leave it alone.
+      console.log('Could not prune stale config at', candidate.configPath, '-', e.message);
+    }
+  }
+}
+
 ipcMain.handle('setup-mcp', () => {
   try {
     const configPath = getClaudeConfigPath();
@@ -285,12 +374,16 @@ ipcMain.handle('setup-mcp', () => {
     // Write it back
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 
+    // Clean up any stale devproduct entry in the other config location
+    // (e.g. leftover from before we detected MSIX installs correctly).
+    pruneStaleMcpConfigs(configPath);
+
     // Verify it was written
     const verify = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     const success = !!(verify.mcpServers && verify.mcpServers.devproduct);
     console.log('MCP setup verified:', success);
 
-    return { success };
+    return { success, configPath };
   } catch (e) {
     console.log('MCP setup error:', e.message);
     return { success: false, error: e.message };

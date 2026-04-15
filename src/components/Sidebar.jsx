@@ -55,7 +55,11 @@ export default function Sidebar({ activeTab, onTabChange, isReady }) {
     setMcpBusy(false);
 
     if (result.success && status.healthy) {
-      setMcpFlash({ type: 'success', text: 'MCP reconnected. Restart Claude Desktop to apply.' });
+      const isMsix = /[\\/]Packages[\\/]/i.test(result.configPath || status.configPath || '');
+      setMcpFlash({
+        type: 'success',
+        text: `MCP reconnected (${isMsix ? 'Microsoft Store' : 'standard'} install). Restart Claude Desktop to apply.`,
+      });
     } else {
       setMcpFlash({ type: 'error', text: result.error || status.issue || 'Reconnect failed.' });
     }
